@@ -1,7 +1,7 @@
 <component name="libraryTable">
   <library name="MailSendAPI">
     <CLASSES>
-      <root url="jar://$PROJECT_DIR$/src/libs/MailSendAPI.jar!/" />
+      <root url="jar://$PROJECT_DIR$/libs/MailSendAPI.jar!/" />
     </CLASSES>
     <JAVADOC />
     <SOURCES />

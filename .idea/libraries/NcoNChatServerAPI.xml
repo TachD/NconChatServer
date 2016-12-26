@@ -1,7 +1,7 @@
 <component name="libraryTable">
   <library name="NcoNChatServerAPI">
     <CLASSES>
-      <root url="jar://$PROJECT_DIR$/src/libs/NcoNChatServerAPI.jar!/" />
+      <root url="jar://$PROJECT_DIR$/libs/NcoNChatServerAPI.jar!/" />
     </CLASSES>
     <JAVADOC />
     <SOURCES />
