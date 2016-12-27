@@ -58,7 +58,7 @@ public class Controller {
     @FXML
     private TextField TFieldPort;
 
-    private String getMD5String(String SourceString) throws NoSuchAlgorithmException {
+    private String getEncryptedString(String SourceString) throws NoSuchAlgorithmException {
         final MessageDigest MD = MessageDigest.getInstance("MD5");
 
         MD.reset();
@@ -78,7 +78,7 @@ public class Controller {
             Temp[0] += Rnd.nextInt()%59 + 63;
 
         try {
-            Temp[1] = getMD5String(Temp[0]);
+            Temp[1] = getEncryptedString(Temp[0]);
             return Temp;
         } catch (NoSuchAlgorithmException NSAEx) {
             System.out.println("Password encryption error! " + NSAEx.getMessage());
@@ -187,6 +187,168 @@ public class Controller {
         }
     }
 
+    private void Auth(Socket CSock, ObjectInputStream IS) throws IOException, ClassNotFoundException, SQLException{
+        String Login = IS.readObject().toString();
+        String Password = IS.readObject().toString();
+
+        ResultSet UsersData = DBStmnt.executeQuery("SELECT NICKNAME, EMAIL, FIRST_NAME, DATEOFBIRTH, LAST_NAME \n" +
+                "FROM USERS WHERE NICKNAME = '" + Login + "' \n" +
+                "AND PASSWORD = '" + Password + "'");
+
+        ObjectOutputStream OS = new ObjectOutputStream(CSock.getOutputStream());
+
+
+        if (UsersData.next()) {
+            for (int i = 1; i < 6; ++i)
+                OS.writeObject(UsersData.getString(i));
+
+            TAreaLog.appendText("User " + Login + " is online!\n");
+        }
+        else
+            OS.writeObject("0");
+
+        IS.close();
+        OS.close();
+
+        CSock.close();
+    }
+
+    private void Validation(Socket CSock, ObjectInputStream IS) throws ClassNotFoundException, IOException, SQLException{
+        ////////////////////
+        String RegNick  = IS.readObject().toString();
+        String RegFName = IS.readObject().toString();
+        String RegLName = IS.readObject().toString();
+        String RegEmail = IS.readObject().toString();
+
+        ResultSet UsersData = DBStmnt.executeQuery("SELECT NICKNAME FROM USERS WHERE " +
+                "NICKNAME = '" + RegNick + "'");
+
+        ObjectOutputStream OS = new ObjectOutputStream(CSock.getOutputStream());
+
+        if (UsersData.next()) {
+            OS.writeObject(-1);
+            OS.close();
+            IS.close();
+            CSock.close();
+            return;
+        }
+
+        UsersData = DBStmnt.executeQuery("SELECT EMAIL FROM USERS WHERE " +
+                "EMAIL = '" + RegEmail + "'");
+        if (UsersData.next()) {
+            OS.writeObject(-2);
+            OS.close();
+            IS.close();
+            CSock.close();
+            return;
+        }
+
+        String[] ValidCodeinMD5 = ValidCode();
+
+        String RegMessage = "Hello, " + RegLName + " " + RegFName + "\n" +
+                "Welcome to your new NcoN account.\n" +
+                "In to verify your e-mail, please input this string " +
+                "data in register form:\n" +
+                "String: " + ValidCodeinMD5[0] +
+                "\n\n" +
+                "Best regards,\n" +
+                "NcoN team!";
+        MailSender.send("Registration", RegMessage, RegEmail);
+
+        TAreaLog.appendText("Sent a message with validation\n\t to " + RegEmail + '\n');
+
+        OS.writeObject(ValidCodeinMD5[1]);
+        ////////////////////
+        OS.close();
+        IS.close();
+        CSock.close();
+    }
+
+    private void AccountRegistration(Socket CSock, ObjectInputStream IS) throws IOException, ClassNotFoundException{
+        ////////////////////
+        String RegNick   = IS.readObject().toString();
+        String RegPass   = IS.readObject().toString();
+        String RegFName  = IS.readObject().toString();
+        String RegLName  = IS.readObject().toString();
+        String RegEmail  = IS.readObject().toString();
+        String RegDBirth = IS.readObject().toString();
+        ////////////////
+
+        ObjectOutputStream OS = new ObjectOutputStream(CSock.getOutputStream());
+        ////////////////
+        boolean isRegistered;
+        try {
+
+            isRegistered = DBStmnt.execute(
+                    "INSERT INTO USERS(NICKNAME, PASSWORD, EMAIL, FIRST_NAME, DATEOFBIRTH, LAST_NAME) " +
+                            "VALUES ('" + RegNick + "','" + RegPass + "','" + RegEmail +
+                            "','" + RegFName + "','" + RegDBirth + "','" + RegLName + "')");
+        } catch (SQLException SQLEx) {
+            TAreaLog.appendText("Account not created! SQL Error!\n");
+            OS.writeObject(0);
+
+            OS.close();
+            IS.close();
+            CSock.close();
+
+            return;
+        }
+        TAreaLog.appendText("Account " + RegNick + " is created!" + '\n');
+        OS.writeObject((isRegistered)?0:1);
+
+        OS.close();
+        IS.close();
+        CSock.close();
+    }
+
+    private void Recovery(Socket CSock, ObjectInputStream IS) throws IOException, ClassNotFoundException, SQLException, NoSuchAlgorithmException{
+        String Email = IS.readObject().toString();
+
+        ResultSet UsersData = DBStmnt.executeQuery("SELECT NICKNAME, PASSWORD FROM USERS WHERE " +
+                "EMAIL = '" + Email + "'");
+
+        ObjectOutputStream OS = new ObjectOutputStream(CSock.getOutputStream());
+
+        if (!UsersData.next()) {
+            OS.writeObject(-1);
+            OS.close();
+            IS.close();
+            CSock.close();
+            return;
+        }
+
+        // Message with recovery data
+        String Nick = UsersData.getString(1);
+        String OldPass = UsersData.getString(2);
+        String NewPass = getEncryptedString(OldPass.substring(0, 6));
+
+        TAreaLog.appendText("Recovery account " + Nick + '\n');
+
+
+        DBStmnt.execute("UPDATE USERS " +
+                "SET PASSWORD ='" + NewPass +
+                "' WHERE EMAIL ='" + Email + "'");
+
+
+        String RegMessage = "Hello, " + Nick + "\n" +
+                "Your NcoN account is recovered.\n" +
+                "You can log in and start using your" +
+                " account with next data: \n" +
+                "Nickname: " + Nick +
+                "\nPassword: " + OldPass.substring(0, 6) +
+                "\n\n" +
+                "Best regards,\n" +
+                "NcoN team!";
+
+        MailSender.send("Recovery", RegMessage, Email);
+
+        OS.writeObject(0);
+        ////////////////////
+        OS.close();
+        IS.close();
+        CSock.close();
+    }
+
     @FXML
     private void UpServer() {
         try {
@@ -211,10 +373,7 @@ public class Controller {
                     TAreaLog.appendText("Error Main Server Socket creating\n");
                 }
 
-                boolean IsUsed = false;
-
-                int PORT;
-
+                // need finally block, restructured socket & stream statement position
                 while (true)
                     try {
                         if (NeedClose)
@@ -223,190 +382,41 @@ public class Controller {
                         Socket CSock = MainSocket.accept();
 
                         ObjectInputStream IS = new ObjectInputStream(CSock.getInputStream());
-                        PORT = Integer.valueOf(IS.readObject().toString());/////////
+                        int PORT = Integer.valueOf(IS.readObject().toString());/////////
 
+                        switch (PORT) {
+                            case -1:
+                                Auth(CSock, IS);
+                                break;
+                            case -2:
+                                // message-send class in other class; Create templates
+                                Validation(CSock, IS);
+                                break;
+                            case -3:
+                                AccountRegistration(CSock, IS);
+                                break;
+                            case -4:
+                                Recovery(CSock, IS);
+                                break;
+                            default:
 
+                                boolean IsUsed = false;
 
-                        if (PORT ==  -1) {
-                            String Login = IS.readObject().toString();
-                            String Password = IS.readObject().toString();
-
-                            ResultSet UsersData = DBStmnt.executeQuery("SELECT NICKNAME, EMAIL, FIRST_NAME, DATEOFBIRTH, LAST_NAME \n" +
-                                                                       "FROM USERS WHERE NICKNAME = '" + Login + "' \n" +
-                                                                                    "AND PASSWORD = '" + Password + "'");
-
-                            ObjectOutputStream OS = new ObjectOutputStream(CSock.getOutputStream());
-
-
-                            if (UsersData.next()) {
-                                for (int i = 1; i < 6; ++i)
-                                    OS.writeObject(UsersData.getString(i));
-
-                                TAreaLog.appendText("User " + Login + " is online!\n");
-                            }
-                            else
-                                OS.writeObject("0");
-
-                            IS.close();
-                            OS.close();
-
-                            CSock.close();
-                            //
-                            continue;
-                        } else
-                            if (PORT == -2) {
-                                ////////////////////
-                                String RegNick  = IS.readObject().toString();
-                                String RegFName = IS.readObject().toString();
-                                String RegLName = IS.readObject().toString();
-                                String RegEmail = IS.readObject().toString();
-
-                                ResultSet UsersData = DBStmnt.executeQuery("SELECT NICKNAME FROM USERS WHERE " +
-                                                                           "NICKNAME = '" + RegNick + "'");
-
-                                ObjectOutputStream OS = new ObjectOutputStream(CSock.getOutputStream());
-
-                                if (UsersData.next()) {
-                                    OS.writeObject(-1);
-                                    OS.close();
-                                    IS.close();
-                                    CSock.close();
-                                    continue;
+                                if (SessionList.size() != 0) {
+                                    for (NcoNServer TempPort : SessionList)
+                                        if (TempPort.getPort() == PORT) {
+                                            IsUsed = true;
+                                            break;
+                                        }
                                 }
+                                else
+                                    IsUsed = false;
 
-                                UsersData = DBStmnt.executeQuery("SELECT EMAIL FROM USERS WHERE " +
-                                                                 "EMAIL = '" + RegEmail + "'");
-                                if (UsersData.next()) {
-                                    OS.writeObject(-2);
-                                    OS.close();
-                                    IS.close();
-                                    CSock.close();
-                                    continue;
-                                }
-
-                                String[] ValidCodeinMD5 = ValidCode();
-
-                                String RegMessage = "Hello, " + RegLName + " " + RegFName + "\n" +
-                                        "Welcome to your new NcoN account.\n" +
-                                        "In to verify your e-mail, please input this string " +
-                                        "data in register form:\n" +
-                                        "String: " + ValidCodeinMD5[0] +
-                                        "\n\n" +
-                                        "Best regards,\n" +
-                                        "NcoN team!";
-                                MailSender.send("Registration", RegMessage, RegEmail);
-
-                                TAreaLog.appendText("Sent a message with validation\n\t to " + RegEmail + '\n');
-
-                                OS.writeObject(ValidCodeinMD5[1]);
-                                ////////////////////
-                                OS.close();
-                                IS.close();
-                                CSock.close();
-                                continue;
-                            }
-                            else
-                            if (PORT == -3) {
-                                ////////////////////
-                                String RegNick   = IS.readObject().toString();
-                                String RegPass   = IS.readObject().toString();
-                                String RegFName  = IS.readObject().toString();
-                                String RegLName  = IS.readObject().toString();
-                                String RegEmail  = IS.readObject().toString();
-                                String RegDBirth = IS.readObject().toString();
-                                ////////////////
-
-                                ObjectOutputStream OS = new ObjectOutputStream(CSock.getOutputStream());
-                                ////////////////
-                                boolean isRegistered;
-                                try {
-
-                                    isRegistered = DBStmnt.execute(
-                                            "INSERT INTO USERS(NICKNAME, PASSWORD, EMAIL, FIRST_NAME, DATEOFBIRTH, LAST_NAME) " +
-                                                    "VALUES ('" + RegNick + "','" + RegPass + "','" + RegEmail +
-                                                    "','" + RegFName + "','" + RegDBirth + "','" + RegLName + "')");
-                                } catch (SQLException SQLEx) {
-                                    TAreaLog.appendText("Account not created! SQL Error!\n");
-                                    OS.writeObject(0);
-
-                                    OS.close();
-                                    IS.close();
-                                    CSock.close();
-
-                                    return;
-                                }
-                                TAreaLog.appendText("Account " + RegNick + " is created!" + '\n');
-                                OS.writeObject((isRegistered)?0:1);
-
-                                OS.close();
-                                IS.close();
-                                CSock.close();
-                                continue;
-                            }
-                            else
-                                if (PORT == -4) {
-                                    String Email = IS.readObject().toString();
-
-                                    ResultSet UsersData = DBStmnt.executeQuery("SELECT NICKNAME, PASSWORD FROM USERS WHERE " +
-                                                                               "EMAIL = '" + Email + "'");
-
-                                    ObjectOutputStream OS = new ObjectOutputStream(CSock.getOutputStream());
-
-                                    if (!UsersData.next()) {
-                                        OS.writeObject(-1);
-                                        OS.close();
-                                        IS.close();
-                                        CSock.close();
-                                        continue;
-                                    }
-
-                                    // Message with recovery data
-                                    String Nick = UsersData.getString(1);
-                                    String OldPass = UsersData.getString(2);
-                                    String NewPass = getMD5String(OldPass.substring(0, 6));
-
-                                    TAreaLog.appendText("Recovery account " + Nick + '\n');
-
-
-                                    DBStmnt.execute("UPDATE USERS " +
-                                                    "SET PASSWORD ='" + NewPass +
-                                                    "' WHERE EMAIL ='" + Email + "'");
-
-
-                                    String RegMessage = "Hello, " + Nick + "\n" +
-                                            "Your NcoN account is recovered.\n" +
-                                            "You can log in and start using your" +
-                                            " account with next data: \n" +
-                                            "Nickname: " + Nick +
-                                            "\nPassword: " + OldPass.substring(0, 6) +
-                                            "\n\n" +
-                                            "Best regards,\n" +
-                                            "NcoN team!";
-
-                                    MailSender.send("Recovery", RegMessage, Email);
-
-                                    OS.writeObject(0);
-                                    ////////////////////
-                                    OS.close();
-                                    IS.close();
-                                    CSock.close();
-                                    continue;
-                                }
-
-                        if (SessionList.size() != 0) {
-                            for (NcoNServer TempPort : SessionList)
-                                if (TempPort.getPort() == PORT) {
-                                    IsUsed = true;
-                                    break;
-                                }
+                                if (!IsUsed)
+                                    GetServer(PORT);
                         }
-                        else
-                            IsUsed = false;
 
-                        if (!IsUsed)
-                            GetServer(PORT);
 
-                        IsUsed = false;
                     } catch (Exception Ex) {
                         TAreaLog.appendText("Server System closed...\n");
                         try {
