@@ -1,5 +1,6 @@
 package sample;
 
+import com.sun.org.apache.bcel.internal.generic.NEW;
 import edu.BarSU.NcoN.MailSend.TLSSender;
 import edu.BarSU.Ncon.Chat.NcoNServer;
 
@@ -22,17 +23,49 @@ import java.util.Locale;
 import java.util.Random;
 
 public class Controller {
-    private TLSSender MailSender = new TLSSender("SuppNcoN@gmail.com", "NcoNSupportPass");
+    private static class MailSender {
+        private static TLSSender TLSSenderObject = new TLSSender("SuppNcoN@gmail.com", "NcoNSupportPass");
 
+        public static void SendRegisterMail(String RegEmail, String RegLName, String RegFName, String ValidCode) {
+            String RegMessage = "Hello, " + RegLName + " " + RegFName + "\n" +
+                    "Welcome to your new NcoN account!\n" +
+                    "In to verify your e-mail, please input this code " +
+                    "in register form:\n" +
+                    "Valid code: " + ValidCode +
+                    "\n\n" +
+                    "Best regards,\n" +
+                    "NcoN team!";
+
+            TLSSenderObject.send("Registration", RegMessage, RegEmail);
+        }
+
+        public static void SendRecoveryMail(String Nick, String Email, String NewPass) {
+            String RegMessage = "Hello, " + Nick + "\n" +
+                    "Your NcoN account is recovered.\n" +
+                    "You can log in and start using your" +
+                    " account with next data: \n" +
+                    "Nickname: " + Nick +
+                    "\nPassword: " + NewPass +
+                    "\n\n" +
+                    "Best regards,\n" +
+                    "NcoN team!";
+
+            TLSSenderObject.send("Recovery", RegMessage, Email);
+        }
+    }
+
+    // JavaFX Components
     private ArrayList<NcoNServer> SessionList = new ArrayList<>();
 
     private ServerSocket MainSocket;
 
     private volatile boolean NeedClose;
+
     // Database statement
     private Connection DBConn;
 
     private Statement DBStmnt;
+
     // .FXML elements
     @FXML
     private Label NameHost;
@@ -59,12 +92,12 @@ public class Controller {
     private TextField TFieldPort;
 
     private String getEncryptedString(String SourceString) throws NoSuchAlgorithmException {
-        final MessageDigest MD = MessageDigest.getInstance("MD5");
+        final MessageDigest MD = MessageDigest.getInstance("SHA-256");
 
         MD.reset();
         MD.update(SourceString.getBytes(Charset.forName("UTF8")));
 
-        return String.format("%032x", new BigInteger(1, MD.digest()));
+        return String.format("%064x", new BigInteger(1, MD.digest()));
     }
 
     private String[] ValidCode() {
@@ -187,16 +220,17 @@ public class Controller {
         }
     }
 
-    private void Auth(Socket CSock, ObjectInputStream IS) throws IOException, ClassNotFoundException, SQLException{
-        String Login = IS.readObject().toString();
+    private void Auth(Socket CSock, ObjectInputStream IS)
+            throws IOException, ClassNotFoundException, SQLException {
+
+        String Login    = IS.readObject().toString();
         String Password = IS.readObject().toString();
 
-        ResultSet UsersData = DBStmnt.executeQuery("SELECT NICKNAME, EMAIL, FIRST_NAME, DATEOFBIRTH, LAST_NAME \n" +
-                "FROM USERS WHERE NICKNAME = '" + Login + "' \n" +
-                "AND PASSWORD = '" + Password + "'");
+        ResultSet UsersData = DBStmnt.executeQuery("SELECT NICKNAME, EMAIL, FIRST_NAME, DATEOFBIRTH, LAST_NAME " +
+                "FROM USERS WHERE NICKNAME = '" + Login    + "' " +
+                             "AND PASSWORD = '" + Password + "'");
 
         ObjectOutputStream OS = new ObjectOutputStream(CSock.getOutputStream());
-
 
         if (UsersData.next()) {
             for (int i = 1; i < 6; ++i)
@@ -207,14 +241,12 @@ public class Controller {
         else
             OS.writeObject("0");
 
-        IS.close();
         OS.close();
-
-        CSock.close();
     }
 
-    private void Validation(Socket CSock, ObjectInputStream IS) throws ClassNotFoundException, IOException, SQLException{
-        ////////////////////
+    private void Validation(Socket CSock, ObjectInputStream IS)
+            throws ClassNotFoundException, IOException, SQLException {
+
         String RegNick  = IS.readObject().toString();
         String RegFName = IS.readObject().toString();
         String RegLName = IS.readObject().toString();
@@ -227,55 +259,44 @@ public class Controller {
 
         if (UsersData.next()) {
             OS.writeObject(-1);
+
             OS.close();
-            IS.close();
-            CSock.close();
             return;
         }
 
         UsersData = DBStmnt.executeQuery("SELECT EMAIL FROM USERS WHERE " +
                 "EMAIL = '" + RegEmail + "'");
+
         if (UsersData.next()) {
             OS.writeObject(-2);
+
             OS.close();
-            IS.close();
-            CSock.close();
             return;
         }
 
-        String[] ValidCodeinMD5 = ValidCode();
+        String[] ValidCode = ValidCode();
 
-        String RegMessage = "Hello, " + RegLName + " " + RegFName + "\n" +
-                "Welcome to your new NcoN account.\n" +
-                "In to verify your e-mail, please input this string " +
-                "data in register form:\n" +
-                "String: " + ValidCodeinMD5[0] +
-                "\n\n" +
-                "Best regards,\n" +
-                "NcoN team!";
-        MailSender.send("Registration", RegMessage, RegEmail);
+        MailSender.SendRegisterMail(RegEmail, RegLName, RegFName, ValidCode[0]);
 
         TAreaLog.appendText("Sent a message with validation\n\t to " + RegEmail + '\n');
 
-        OS.writeObject(ValidCodeinMD5[1]);
-        ////////////////////
+        OS.writeObject(ValidCode[1]);
+
         OS.close();
-        IS.close();
-        CSock.close();
     }
 
-    private void AccountRegistration(Socket CSock, ObjectInputStream IS) throws IOException, ClassNotFoundException{
-        ////////////////////
+    private void AccountRegistration(Socket CSock, ObjectInputStream IS)
+            throws IOException, ClassNotFoundException {
+
         String RegNick   = IS.readObject().toString();
         String RegPass   = IS.readObject().toString();
         String RegFName  = IS.readObject().toString();
         String RegLName  = IS.readObject().toString();
         String RegEmail  = IS.readObject().toString();
         String RegDBirth = IS.readObject().toString();
-        ////////////////
 
         ObjectOutputStream OS = new ObjectOutputStream(CSock.getOutputStream());
-        ////////////////
+
         boolean isRegistered;
         try {
 
@@ -288,20 +309,23 @@ public class Controller {
             OS.writeObject(0);
 
             OS.close();
-            IS.close();
-            CSock.close();
-
             return;
         }
-        TAreaLog.appendText("Account " + RegNick + " is created!" + '\n');
-        OS.writeObject((isRegistered)?0:1);
+
+        if (isRegistered) {
+            TAreaLog.appendText("Account " + RegNick + " created!" + '\n');
+            OS.writeObject(1);
+        }
+        else {
+            TAreaLog.appendText("Account " + RegNick + " not created!" + '\n');
+            OS.writeObject(0);
+        }
 
         OS.close();
-        IS.close();
-        CSock.close();
     }
 
-    private void Recovery(Socket CSock, ObjectInputStream IS) throws IOException, ClassNotFoundException, SQLException, NoSuchAlgorithmException{
+    private void Recovery(Socket CSock, ObjectInputStream IS)
+            throws IOException, ClassNotFoundException, SQLException, NoSuchAlgorithmException {
         String Email = IS.readObject().toString();
 
         ResultSet UsersData = DBStmnt.executeQuery("SELECT NICKNAME, PASSWORD FROM USERS WHERE " +
@@ -322,31 +346,18 @@ public class Controller {
         String OldPass = UsersData.getString(2);
         String NewPass = getEncryptedString(OldPass.substring(0, 6));
 
-        TAreaLog.appendText("Recovery account " + Nick + '\n');
+        TAreaLog.appendText("Recovering account " + Nick + "...\n");
 
 
         DBStmnt.execute("UPDATE USERS " +
                 "SET PASSWORD ='" + NewPass +
                 "' WHERE EMAIL ='" + Email + "'");
 
-
-        String RegMessage = "Hello, " + Nick + "\n" +
-                "Your NcoN account is recovered.\n" +
-                "You can log in and start using your" +
-                " account with next data: \n" +
-                "Nickname: " + Nick +
-                "\nPassword: " + OldPass.substring(0, 6) +
-                "\n\n" +
-                "Best regards,\n" +
-                "NcoN team!";
-
-        MailSender.send("Recovery", RegMessage, Email);
+        MailSender.SendRecoveryMail(Nick, Email, OldPass.substring(0, 6));
 
         OS.writeObject(0);
-        ////////////////////
+
         OS.close();
-        IS.close();
-        CSock.close();
     }
 
     @FXML
@@ -373,7 +384,6 @@ public class Controller {
                     TAreaLog.appendText("Error Main Server Socket creating\n");
                 }
 
-                // need finally block, restructured socket & stream statement position
                 while (true)
                     try {
                         if (NeedClose)
@@ -382,14 +392,13 @@ public class Controller {
                         Socket CSock = MainSocket.accept();
 
                         ObjectInputStream IS = new ObjectInputStream(CSock.getInputStream());
-                        int PORT = Integer.valueOf(IS.readObject().toString());/////////
+                        int PORT = Integer.valueOf(IS.readObject().toString());
 
                         switch (PORT) {
                             case -1:
                                 Auth(CSock, IS);
                                 break;
                             case -2:
-                                // message-send class in other class; Create templates
                                 Validation(CSock, IS);
                                 break;
                             case -3:
@@ -399,31 +408,30 @@ public class Controller {
                                 Recovery(CSock, IS);
                                 break;
                             default:
-
                                 boolean IsUsed = false;
 
-                                if (SessionList.size() != 0) {
+                                if (SessionList.size() != 0)
                                     for (NcoNServer TempPort : SessionList)
                                         if (TempPort.getPort() == PORT) {
                                             IsUsed = true;
                                             break;
                                         }
-                                }
-                                else
-                                    IsUsed = false;
 
                                 if (!IsUsed)
                                     GetServer(PORT);
                         }
 
+                        IS.close();
+                        CSock.close();
 
                     } catch (Exception Ex) {
                         TAreaLog.appendText("Server System closed...\n");
+
                         try {
                             MainSocket.close();
                             MainSocket = null;
                         } catch (IOException IOEx) {
-                            TAreaLog.appendText("Main socket closes error!\n");
+                            TAreaLog.appendText("Main socket closed error!\n");
                         }
                         break;
                     }
