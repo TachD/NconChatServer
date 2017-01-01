@@ -1,6 +1,5 @@
 package sample;
 
-import com.sun.org.apache.bcel.internal.generic.NEW;
 import edu.BarSU.NcoN.MailSend.TLSSender;
 import edu.BarSU.Ncon.Chat.NcoNServer;
 
@@ -9,15 +8,16 @@ import javafx.scene.control.*;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.nio.charset.Charset;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
-import java.nio.charset.Charset;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.*;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Random;
@@ -91,6 +91,24 @@ public class Controller {
     @FXML
     private TextField TFieldPort;
 
+    private String TimeLog() {
+        LocalTime NowTime = LocalTime.now();
+
+        String TimeLogMessage = "[";
+
+        if (NowTime.getHour() < 10)
+            TimeLogMessage += "0";
+
+        TimeLogMessage += NowTime.getHour() + ":";
+
+        if (NowTime.getMinute() < 10)
+            TimeLogMessage += "0";
+
+        TimeLogMessage += NowTime.getMinute() + "] ";
+
+        return TimeLogMessage;
+    }
+
     private String getEncryptedString(String SourceString) throws NoSuchAlgorithmException {
         final MessageDigest MD = MessageDigest.getInstance("SHA-256");
 
@@ -133,11 +151,11 @@ public class Controller {
 
         if (!IsConnectedRequest)
             if(SessionList.add(ListenClient(PORT))) {
-                TAreaLog.appendText("P " + PORT + ". Start NcoN server\n");
+                TAreaLog.appendText(TimeLog() + "P " + PORT + ". Start NcoN server\n");
                 SessionList.get(SessionList.size() - 1).UpServer();
             }
             else
-                TAreaLog.appendText("P " + PORT + ". Error NcoN server starting\n");
+                TAreaLog.appendText(TimeLog() + "P " + PORT + ". Error NcoN server starting\n");
     }
 
     private NcoNServer ListenClient(int PORT) {
@@ -146,7 +164,7 @@ public class Controller {
         try {
             TempStatementServer.listen();
         } catch (IOException IOEx) {
-            TAreaLog.appendText("P" + PORT + ". NcoN Server creating error! " + IOEx.getMessage() + "\n");
+            TAreaLog.appendText(TimeLog() + "P" + PORT + ". NcoN Server creating error! " + IOEx.getMessage() + "\n");
             return null;
         }
 
@@ -169,11 +187,11 @@ public class Controller {
 
             DBStmnt = DBConn.createStatement();
         } catch (SQLException SQLEx) {
-            TAreaLog.appendText("Connect to database not completed!\n");
+            TAreaLog.appendText(TimeLog() + "Connect to database not completed!\n");
             TAreaLog.appendText(SQLEx.getMessage());
             return;
         }
-        TAreaLog.appendText("Connect to database completed!\n");
+        TAreaLog.appendText(TimeLog() + "Connect to database completed!\n");
     }
 
     @FXML
@@ -183,11 +201,14 @@ public class Controller {
         BDBType.getItems().addAll("Oracle", "My SQL");
 
         BDBType.setValue("Oracle");
+
+        ConnectionToDataBase();
+        UpServer();
     }
 
     @FXML
     private void DownServer() {
-        TAreaLog.appendText("Server downing...\n");
+        TAreaLog.appendText(TimeLog() + "Server downing...\n");
         NeedClose = true;
 
         for (int i = 0; i < SessionList.size(); ++i) {
@@ -201,7 +222,7 @@ public class Controller {
         try {
             DBStmnt.close();
             DBConn.close();
-            TAreaLog.appendText("Database disconnected!\n");
+            TAreaLog.appendText(TimeLog() + "Database disconnected!\n");
 
             try {
                 Socket ClosedSocket = new Socket(InetAddress.getLocalHost(), 10001);
@@ -214,7 +235,7 @@ public class Controller {
                 TAreaLog.appendText("Main Socket closed error!\n\n");
             }
 
-            TAreaLog.appendText("Server down access!\n\n");
+            TAreaLog.appendText(TimeLog() + "Server down access!\n\n");
         } catch (SQLException SQLEx) {
             TAreaLog.appendText("Downing server error! " + SQLEx.getMessage() + "\n\n");
         }
@@ -236,7 +257,7 @@ public class Controller {
             for (int i = 1; i < 6; ++i)
                 OS.writeObject(UsersData.getString(i));
 
-            TAreaLog.appendText("User " + Login + " is online!\n");
+            TAreaLog.appendText(TimeLog() + "User " + Login + " is online!\n");
         }
         else
             OS.writeObject("0");
@@ -278,7 +299,7 @@ public class Controller {
 
         MailSender.SendRegisterMail(RegEmail, RegLName, RegFName, ValidCode[0]);
 
-        TAreaLog.appendText("Sent a message with validation\n\t to " + RegEmail + '\n');
+        TAreaLog.appendText(TimeLog() + "Sent a message with validation\n\t to " + RegEmail + '\n');
 
         OS.writeObject(ValidCode[1]);
 
@@ -305,7 +326,7 @@ public class Controller {
                             "VALUES ('" + RegNick + "','" + RegPass + "','" + RegEmail +
                             "','" + RegFName + "','" + RegDBirth + "','" + RegLName + "')");
         } catch (SQLException SQLEx) {
-            TAreaLog.appendText("Account not created! SQL Error!\n");
+            TAreaLog.appendText(TimeLog() + "Account not created! SQL Error!\n");
             OS.writeObject(0);
 
             OS.close();
@@ -313,11 +334,11 @@ public class Controller {
         }
 
         if (isRegistered) {
-            TAreaLog.appendText("Account " + RegNick + " created!" + '\n');
+            TAreaLog.appendText(TimeLog() + "Account " + RegNick + " created!" + '\n');
             OS.writeObject(1);
         }
         else {
-            TAreaLog.appendText("Account " + RegNick + " not created!" + '\n');
+            TAreaLog.appendText(TimeLog() + "Account " + RegNick + " not created!" + '\n');
             OS.writeObject(0);
         }
 
@@ -346,7 +367,7 @@ public class Controller {
         String OldPass = UsersData.getString(2);
         String NewPass = getEncryptedString(OldPass.substring(0, 6));
 
-        TAreaLog.appendText("Recovering account " + Nick + "...\n");
+        TAreaLog.appendText(TimeLog() + "Recovering account " + Nick + "...\n");
 
 
         DBStmnt.execute("UPDATE USERS " +
@@ -364,7 +385,7 @@ public class Controller {
     private void UpServer() {
         try {
             if (DBConn == null || DBConn.isClosed()) {
-                TAreaLog.appendText("Connect to the database and try again.\n");
+                TAreaLog.appendText(TimeLog() + "Connect to the database and try again.\n");
                 return;
             }
         } catch (SQLException SQLEx) {}
@@ -375,13 +396,13 @@ public class Controller {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                TAreaLog.appendText("Server System starting...\n");
+                TAreaLog.appendText(TimeLog() + "Server System starting...\n");
 
                 try {
                     if (MainSocket == null)
                         MainSocket = new ServerSocket(10001);
                 } catch (IOException IOEx) {
-                    TAreaLog.appendText("Error Main Server Socket creating\n");
+                    TAreaLog.appendText(TimeLog() + "Error Main Server Socket creating\n");
                 }
 
                 while (true)
@@ -425,13 +446,13 @@ public class Controller {
                         CSock.close();
 
                     } catch (Exception Ex) {
-                        TAreaLog.appendText("Server System closed...\n");
+                        TAreaLog.appendText(TimeLog() + "Server System closed...\n");
 
                         try {
                             MainSocket.close();
                             MainSocket = null;
                         } catch (IOException IOEx) {
-                            TAreaLog.appendText("Main socket closed error!\n");
+                            TAreaLog.appendText(TimeLog() + "Main socket closed error!\n");
                         }
                         break;
                     }
@@ -449,6 +470,7 @@ public class Controller {
     private void GetMonitoringData() {
         TAreaLog.appendText("\n\tServer Monitoring\n");
 
+        TAreaLog.appendText("\t" + TimeLog() + "\n\n");
         TAreaLog.appendText("Database status: ");
         try {
             if (DBConn != null && !DBConn.isClosed())
