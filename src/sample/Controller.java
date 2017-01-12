@@ -57,6 +57,8 @@ public class Controller {
     // JavaFX Components
     private ArrayList<NcoNServer> SessionList = new ArrayList<>();
 
+    private ArrayList<String> OnlineList = new ArrayList<>();
+
     private ServerSocket MainSocket;
 
     private volatile boolean NeedClose;
@@ -258,6 +260,8 @@ public class Controller {
                 OS.writeObject(UsersData.getString(i));
 
             TAreaLog.appendText(TimeLog() + "User " + Login + " is online!\n");
+
+            OnlineList.add(Login);
         }
         else
             OS.writeObject("0");
@@ -381,6 +385,16 @@ public class Controller {
         OS.close();
     }
 
+    private void Logout(Socket CSock, ObjectInputStream IS)
+            throws IOException, ClassNotFoundException, SQLException, NoSuchAlgorithmException {
+
+        String Login = (String) IS.readObject();
+
+        TAreaLog.appendText(TimeLog() + "User " + Login + " is offline!\n");
+
+        OnlineList.remove(Login);
+    }
+
     @FXML
     private void UpServer() {
         try {
@@ -410,6 +424,7 @@ public class Controller {
                         if (NeedClose)
                             throw new Exception();
 
+
                         Socket CSock = MainSocket.accept();
 
                         ObjectInputStream IS = new ObjectInputStream(CSock.getInputStream());
@@ -428,6 +443,9 @@ public class Controller {
                             case -4:
                                 Recovery(CSock, IS);
                                 break;
+                            case -5:
+                                Logout(CSock, IS);
+                                break;
                             default:
                                 boolean IsUsed = false;
 
@@ -439,7 +457,13 @@ public class Controller {
                                         }
 
                                 if (!IsUsed)
-                                    GetServer(PORT);
+                                    new Thread(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            GetServer(PORT);
+                                        }
+                                    }).start();
+
                         }
 
                         IS.close();
