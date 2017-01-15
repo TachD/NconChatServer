@@ -54,7 +54,6 @@ public class Controller {
         }
     }
 
-    // JavaFX Components
     private ArrayList<NcoNServer> SessionList = new ArrayList<>();
 
     private ArrayList<String> OnlineList = new ArrayList<>();
@@ -243,7 +242,7 @@ public class Controller {
         }
     }
 
-    private void Auth(Socket CSock, ObjectInputStream IS)
+    private void Auth(ObjectInputStream IS, ObjectOutputStream OS)
             throws IOException, ClassNotFoundException, SQLException {
 
         String Login    = IS.readObject().toString();
@@ -252,8 +251,6 @@ public class Controller {
         ResultSet UsersData = DBStmnt.executeQuery("SELECT NICKNAME, EMAIL, FIRST_NAME, DATEOFBIRTH, LAST_NAME " +
                 "FROM USERS WHERE NICKNAME = '" + Login    + "' " +
                              "AND PASSWORD = '" + Password + "'");
-
-        ObjectOutputStream OS = new ObjectOutputStream(CSock.getOutputStream());
 
         if (UsersData.next()) {
             for (int i = 1; i < 6; ++i)
@@ -265,11 +262,9 @@ public class Controller {
         }
         else
             OS.writeObject("0");
-
-        OS.close();
     }
 
-    private void Validation(Socket CSock, ObjectInputStream IS)
+    private void Validation(ObjectInputStream IS, ObjectOutputStream OS)
             throws ClassNotFoundException, IOException, SQLException {
 
         String RegNick  = IS.readObject().toString();
@@ -280,12 +275,9 @@ public class Controller {
         ResultSet UsersData = DBStmnt.executeQuery("SELECT NICKNAME FROM USERS WHERE " +
                 "NICKNAME = '" + RegNick + "'");
 
-        ObjectOutputStream OS = new ObjectOutputStream(CSock.getOutputStream());
-
         if (UsersData.next()) {
             OS.writeObject(-1);
 
-            OS.close();
             return;
         }
 
@@ -295,7 +287,6 @@ public class Controller {
         if (UsersData.next()) {
             OS.writeObject(-2);
 
-            OS.close();
             return;
         }
 
@@ -306,11 +297,9 @@ public class Controller {
         TAreaLog.appendText(TimeLog() + "Sent a message with validation\n\t to " + RegEmail + '\n');
 
         OS.writeObject(ValidCode[1]);
-
-        OS.close();
     }
 
-    private void AccountRegistration(Socket CSock, ObjectInputStream IS)
+    private void AccountRegistration(ObjectInputStream IS, ObjectOutputStream OS)
             throws IOException, ClassNotFoundException {
 
         String RegNick   = IS.readObject().toString();
@@ -319,8 +308,6 @@ public class Controller {
         String RegLName  = IS.readObject().toString();
         String RegEmail  = IS.readObject().toString();
         String RegDBirth = IS.readObject().toString();
-
-        ObjectOutputStream OS = new ObjectOutputStream(CSock.getOutputStream());
 
         boolean isRegistered;
         try {
@@ -333,7 +320,6 @@ public class Controller {
             TAreaLog.appendText(TimeLog() + "Account not created! SQL Error!\n");
             OS.writeObject(0);
 
-            OS.close();
             return;
         }
 
@@ -345,24 +331,19 @@ public class Controller {
             TAreaLog.appendText(TimeLog() + "Account " + RegNick + " not created!" + '\n');
             OS.writeObject(0);
         }
-
-        OS.close();
     }
 
-    private void Recovery(Socket CSock, ObjectInputStream IS)
+    private void Recovery(ObjectInputStream IS, ObjectOutputStream OS)
             throws IOException, ClassNotFoundException, SQLException, NoSuchAlgorithmException {
+
         String Email = IS.readObject().toString();
 
         ResultSet UsersData = DBStmnt.executeQuery("SELECT NICKNAME, PASSWORD FROM USERS WHERE " +
                 "EMAIL = '" + Email + "'");
 
-        ObjectOutputStream OS = new ObjectOutputStream(CSock.getOutputStream());
-
         if (!UsersData.next()) {
             OS.writeObject(-1);
-            OS.close();
-            IS.close();
-            CSock.close();
+
             return;
         }
 
@@ -381,11 +362,9 @@ public class Controller {
         MailSender.SendRecoveryMail(Nick, Email, OldPass.substring(0, 6));
 
         OS.writeObject(0);
-
-        OS.close();
     }
 
-    private void Logout(Socket CSock, ObjectInputStream IS)
+    private void Logout(ObjectInputStream IS)
             throws IOException, ClassNotFoundException, SQLException, NoSuchAlgorithmException {
 
         String Login = (String) IS.readObject();
@@ -424,27 +403,32 @@ public class Controller {
                         if (NeedClose)
                             throw new Exception();
 
+                        ObjectOutputStream OS = null;
 
                         Socket CSock = MainSocket.accept();
 
                         ObjectInputStream IS = new ObjectInputStream(CSock.getInputStream());
+
                         int PORT = Integer.valueOf(IS.readObject().toString());
+
+                        if (PORT != -5)
+                            OS = new ObjectOutputStream(CSock.getOutputStream());
 
                         switch (PORT) {
                             case -1:
-                                Auth(CSock, IS);
+                                Auth(IS, OS);
                                 break;
                             case -2:
-                                Validation(CSock, IS);
+                                Validation(IS, OS);
                                 break;
                             case -3:
-                                AccountRegistration(CSock, IS);
+                                AccountRegistration(IS, OS);
                                 break;
                             case -4:
-                                Recovery(CSock, IS);
+                                Recovery(IS, OS);
                                 break;
                             case -5:
-                                Logout(CSock, IS);
+                                Logout(IS);
                                 break;
                             default:
                                 boolean IsUsed = false;
@@ -467,6 +451,7 @@ public class Controller {
                         }
 
                         IS.close();
+                        OS.close();
                         CSock.close();
 
                     } catch (Exception Ex) {
