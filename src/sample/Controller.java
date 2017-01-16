@@ -1,19 +1,16 @@
 package sample;
 
 import edu.BarSU.NcoN.MailSend.TLSSender;
-import edu.BarSU.Ncon.Chat.NcoNServer;
 
+import edu.BarSU.Ncon.Chat.Server.NcoNServer;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.*;
 import java.nio.charset.Charset;
 import java.math.BigInteger;
-import java.net.InetAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.UnknownHostException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.*;
@@ -55,6 +52,8 @@ public class Controller {
     }
 
     private ArrayList<NcoNServer> SessionList = new ArrayList<>();
+
+    private ArrayList<String> PortList = new ArrayList<>();
 
     private ArrayList<String> OnlineList = new ArrayList<>();
 
@@ -140,20 +139,20 @@ public class Controller {
 
     private void GetServer(int PORT) {
 
-        boolean IsConnectedRequest = false;
+        boolean isConnectedRequest = false;
 
-        if (SessionList.size() > 0)
-            for (NcoNServer Temp: SessionList)
-                if (Temp.getPort() == PORT) {
-                    IsConnectedRequest = true;
-                    break;
-                }
+        for (String Temp: PortList)
+            if (Temp.equals(String.valueOf(PORT))) {
+                isConnectedRequest = true;
+                break;
+            }
 
-
-        if (!IsConnectedRequest)
+        if (!isConnectedRequest)
             if(SessionList.add(ListenClient(PORT))) {
                 TAreaLog.appendText(TimeLog() + "P " + PORT + ". Start NcoN server\n");
                 SessionList.get(SessionList.size() - 1).UpServer();
+
+                PortList.add(String.valueOf(PORT));
             }
             else
                 TAreaLog.appendText(TimeLog() + "P " + PORT + ". Error NcoN server starting\n");
@@ -162,12 +161,7 @@ public class Controller {
     private NcoNServer ListenClient(int PORT) {
         NcoNServer TempStatementServer = new NcoNServer(PORT);
 
-        try {
-            TempStatementServer.listen();
-        } catch (IOException IOEx) {
-            TAreaLog.appendText(TimeLog() + "P" + PORT + ". NcoN Server creating error! " + IOEx.getMessage() + "\n");
-            return null;
-        }
+        TempStatementServer.listen();
 
         return TempStatementServer;
     }
@@ -207,7 +201,7 @@ public class Controller {
         UpServer();
     }
 
-    @FXML
+    @FXML // EDIT! Not ending
     private void DownServer() {
         TAreaLog.appendText(TimeLog() + "Server downing...\n");
         NeedClose = true;
@@ -226,9 +220,12 @@ public class Controller {
             TAreaLog.appendText(TimeLog() + "Database disconnected!\n");
 
             try {
-                Socket ClosedSocket = new Socket(InetAddress.getLocalHost(), 10001);
+                SocketAddress SockAddr = new InetSocketAddress(InetAddress.getLocalHost() ,10001);
+                Socket CloserSocket = new Socket();
 
-                ClosedSocket.close();
+                CloserSocket.connect(SockAddr);
+
+                CloserSocket.close();
 
                 MainSocket.close();
             } catch (UnknownHostException UHEx) {
@@ -391,9 +388,12 @@ public class Controller {
             public void run() {
                 TAreaLog.appendText(TimeLog() + "Server System starting...\n");
 
+                SocketAddress SockAddr = new InetSocketAddress("0.0.0.0", 10001);
                 try {
-                    if (MainSocket == null)
-                        MainSocket = new ServerSocket(10001);
+                    if (MainSocket == null) {
+                        MainSocket = new ServerSocket();
+                        MainSocket.bind(SockAddr);
+                    }
                 } catch (IOException IOEx) {
                     TAreaLog.appendText(TimeLog() + "Error Main Server Socket creating\n");
                 }
@@ -411,7 +411,7 @@ public class Controller {
 
                         int PORT = Integer.valueOf(IS.readObject().toString());
 
-                        if (PORT != -5)
+                        if (PORT < 0 && PORT > -5)
                             OS = new ObjectOutputStream(CSock.getOutputStream());
 
                         switch (PORT) {
@@ -434,25 +434,25 @@ public class Controller {
                                 boolean IsUsed = false;
 
                                 if (SessionList.size() != 0)
-                                    for (NcoNServer TempPort : SessionList)
-                                        if (TempPort.getPort() == PORT) {
+                                    for (NcoNServer TempServer : SessionList)
+                                        if (TempServer.getPort() == PORT) {
                                             IsUsed = true;
                                             break;
                                         }
 
-                                if (!IsUsed)
-                                    new Thread(new Runnable() {
-                                        @Override
-                                        public void run() {
-                                            GetServer(PORT);
-                                        }
-                                    }).start();
+                                if (!IsUsed) // Was user uncorrected Thread-object
+                                    GetServer(PORT);
 
                         }
 
-                        IS.close();
-                        OS.close();
-                        CSock.close();
+                        if (OS != null)
+                            OS.close();
+
+                        if (IS != null)
+                            IS.close();
+
+                        if (CSock != null)
+                            CSock.close();
 
                     } catch (Exception Ex) {
                         TAreaLog.appendText(TimeLog() + "Server System closed...\n");
@@ -502,7 +502,7 @@ public class Controller {
 
         for (int i = 0; i < SessionList.size(); ++i)
             TAreaLog.appendText((i + 1) + ": P" + SessionList.get(i).getPort() + " status: " +
-                    SessionList.get(i).IsActive() + "\n");
+                    SessionList.get(i).isActive() + "\n");
 
         TAreaLog.appendText("\n");
     }
