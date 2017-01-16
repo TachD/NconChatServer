@@ -201,7 +201,7 @@ public class Controller {
         UpServer();
     }
 
-    @FXML // EDIT! Not ending
+    @FXML
     private void DownServer() {
         TAreaLog.appendText(TimeLog() + "Server downing...\n");
         NeedClose = true;
@@ -211,6 +211,9 @@ public class Controller {
             SessionList.get(i).CloseStream();
             SessionList.remove(i);
         }
+
+        PortList.clear();
+        OnlineList.clear();
 
         System.gc();
 
@@ -398,7 +401,7 @@ public class Controller {
                     TAreaLog.appendText(TimeLog() + "Error Main Server Socket creating\n");
                 }
 
-                while (true)
+                while (true) // Need structuring according to the principle of the method in the client-project (MainMethod)
                     try {
                         if (NeedClose)
                             throw new Exception();
@@ -459,7 +462,6 @@ public class Controller {
 
                         try {
                             MainSocket.close();
-                            MainSocket = null;
                         } catch (IOException IOEx) {
                             TAreaLog.appendText(TimeLog() + "Main socket closed error!\n");
                         }
@@ -503,6 +505,16 @@ public class Controller {
         for (int i = 0; i < SessionList.size(); ++i)
             TAreaLog.appendText((i + 1) + ": P" + SessionList.get(i).getPort() + " status: " +
                     SessionList.get(i).isActive() + "\n");
+
+        TAreaLog.appendText("\n");
+
+        if (SessionList.size() == 0)
+            TAreaLog.appendText("No user online!\n");
+        else
+            TAreaLog.appendText("User online list:!\n");
+
+        for (String Nick: OnlineList)
+            TAreaLog.appendText("\t" + Nick + "\n");
 
         TAreaLog.appendText("\n");
     }
