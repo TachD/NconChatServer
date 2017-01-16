@@ -109,7 +109,8 @@ public class Controller {
         return TimeLogMessage;
     }
 
-    private String getEncryptedString(String SourceString) throws NoSuchAlgorithmException {
+    private String getEncryptedString(String SourceString)
+            throws NoSuchAlgorithmException {
         final MessageDigest MD = MessageDigest.getInstance("SHA-256");
 
         MD.reset();
@@ -130,11 +131,12 @@ public class Controller {
 
         try {
             Temp[1] = getEncryptedString(Temp[0]);
-            return Temp;
         } catch (NoSuchAlgorithmException NSAEx) {
             System.out.println("Password encryption error! " + NSAEx.getMessage());
             return null;
         }
+
+        return Temp;
     }
 
     private void GetServer(int PORT) {
@@ -148,7 +150,7 @@ public class Controller {
             }
 
         if (!isConnectedRequest)
-            if(SessionList.add(ListenClient(PORT))) {
+            if(SessionList.add(listenClient(PORT))) {
                 TAreaLog.appendText(TimeLog() + "P " + PORT + ". Start NcoN server\n");
                 SessionList.get(SessionList.size() - 1).UpServer();
 
@@ -158,88 +160,12 @@ public class Controller {
                 TAreaLog.appendText(TimeLog() + "P " + PORT + ". Error NcoN server starting\n");
     }
 
-    private NcoNServer ListenClient(int PORT) {
+    private NcoNServer listenClient(int PORT) {
         NcoNServer TempStatementServer = new NcoNServer(PORT);
 
         TempStatementServer.listen();
 
         return TempStatementServer;
-    }
-
-    @FXML
-    private void ConnectionToDataBase() {
-        String ConnectURL;
-
-        Locale.setDefault(Locale.ENGLISH);
-
-        ConnectURL = (BDBType.getValue() == "Oracle")?
-                "jdbc:oracle:thin:@//":"jdbc:mysql://";
-
-        ConnectURL += TFeldHost.getText() + ":" + TFieldPort.getText() + "/" + TFieldServise.getText();
-
-        try {
-            DBConn = DriverManager.getConnection(ConnectURL, TFieldUser.getText(), PFieldPass.getText());
-
-            DBStmnt = DBConn.createStatement();
-        } catch (SQLException SQLEx) {
-            TAreaLog.appendText(TimeLog() + "Connect to database not completed!\n");
-            TAreaLog.appendText(SQLEx.getMessage());
-            return;
-        }
-        TAreaLog.appendText(TimeLog() + "Connect to database completed!\n");
-    }
-
-    @FXML
-    private void initialize() throws Exception {
-        NameHost.setText("Host name: " + InetAddress.getLocalHost().toString());
-
-        BDBType.getItems().addAll("Oracle", "My SQL");
-
-        BDBType.setValue("Oracle");
-
-        ConnectionToDataBase();
-        UpServer();
-    }
-
-    @FXML
-    private void DownServer() {
-        TAreaLog.appendText(TimeLog() + "Server downing...\n");
-        NeedClose = true;
-
-        for (int i = 0; i < SessionList.size(); ++i) {
-            TAreaLog.appendText("Server in port " + SessionList.get(i).getPort() + " was closed!\n");
-            SessionList.get(i).CloseStream();
-            SessionList.remove(i);
-        }
-
-        PortList.clear();
-        OnlineList.clear();
-
-        System.gc();
-
-        try {
-            DBStmnt.close();
-            DBConn.close();
-            TAreaLog.appendText(TimeLog() + "Database disconnected!\n");
-
-            try {
-                SocketAddress SockAddr = new InetSocketAddress(InetAddress.getLocalHost() ,10001);
-                Socket CloserSocket = new Socket();
-
-                CloserSocket.connect(SockAddr);
-
-                CloserSocket.close();
-
-                MainSocket.close();
-            } catch (UnknownHostException UHEx) {
-            } catch (IOException IOEx) {
-                TAreaLog.appendText("Main Socket closed error!\n\n");
-            }
-
-            TAreaLog.appendText(TimeLog() + "Server down access!\n\n");
-        } catch (SQLException SQLEx) {
-            TAreaLog.appendText("Downing server error! " + SQLEx.getMessage() + "\n\n");
-        }
     }
 
     private void Auth(ObjectInputStream IS, ObjectOutputStream OS)
@@ -317,7 +243,7 @@ public class Controller {
                             "VALUES ('" + RegNick + "','" + RegPass + "','" + RegEmail +
                             "','" + RegFName + "','" + RegDBirth + "','" + RegLName + "')");
         } catch (SQLException SQLEx) {
-            TAreaLog.appendText(TimeLog() + "Account not created! SQL Error!\n");
+            TAreaLog.appendText(TimeLog() + "Account " + RegNick + " not created!" + '\n');
             OS.writeObject(0);
 
             return;
@@ -334,14 +260,14 @@ public class Controller {
     }
 
     private void Recovery(ObjectInputStream IS, ObjectOutputStream OS)
-            throws IOException, ClassNotFoundException, SQLException, NoSuchAlgorithmException {
+            throws IOException, ClassNotFoundException, NoSuchAlgorithmException, SQLException {
 
         String Email = IS.readObject().toString();
 
         ResultSet UsersData = DBStmnt.executeQuery("SELECT NICKNAME, PASSWORD FROM USERS WHERE " +
-                "EMAIL = '" + Email + "'");
+                    "EMAIL = '" + Email + "'");
 
-        if (!UsersData.next()) {
+        if (UsersData == null || !UsersData.next()) {
             OS.writeObject(-1);
 
             return;
@@ -401,7 +327,7 @@ public class Controller {
                     TAreaLog.appendText(TimeLog() + "Error Main Server Socket creating\n");
                 }
 
-                while (true) // Need structuring according to the principle of the method in the client-project (MainMethod)
+                while (true)
                     try {
                         if (NeedClose)
                             throw new Exception();
@@ -443,7 +369,7 @@ public class Controller {
                                             break;
                                         }
 
-                                if (!IsUsed) // Was user uncorrected Thread-object
+                                if (!IsUsed)
                                     GetServer(PORT);
 
                         }
@@ -469,6 +395,30 @@ public class Controller {
                     }
                 }
         }, "Main_listener").start();
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (true) {
+                    if (NeedClose)
+                        break;
+
+                    try {
+                        Thread.sleep(10000);
+                    } catch (InterruptedException IEx) {
+                        TAreaLog.appendText(TimeLog() + "Clearing port list thread crashed!\n\n");
+                    }
+
+                    TAreaLog.appendText(TimeLog() + "Clean port...\n\n");
+                    for (NcoNServer TempServer: SessionList) // Exception
+                        if(!TempServer.isActive()) {
+                            TempServer.CloseStream();
+                            SessionList.remove(TempServer);
+                    }
+
+                }
+            }
+        }).start();
 
     }
 
@@ -508,14 +458,90 @@ public class Controller {
 
         TAreaLog.appendText("\n");
 
-        if (SessionList.size() == 0)
-            TAreaLog.appendText("No user online!\n");
-        else
-            TAreaLog.appendText("User online list:!\n");
+        TAreaLog.appendText((OnlineList.size() == 0)?
+                "No user online!\n":"User online list:!\n");
 
         for (String Nick: OnlineList)
             TAreaLog.appendText("\t" + Nick + "\n");
 
-        TAreaLog.appendText("\n");
+        if (OnlineList.size() != 0)
+            TAreaLog.appendText("\tTotal online: " + OnlineList.size() + "\n\n");
+    }
+
+    @FXML
+    private void ConnectionToDataBase() {
+        Locale.setDefault(Locale.ENGLISH);
+
+        String ConnectURL = (BDBType.getValue() == "Oracle")?
+                "jdbc:oracle:thin:@//":"jdbc:mysql://";
+
+        ConnectURL += TFeldHost.getText() + ":" + TFieldPort.getText() + "/" + TFieldServise.getText();
+
+        try {
+            DBConn = DriverManager.getConnection(ConnectURL, TFieldUser.getText(), PFieldPass.getText());
+
+            DBStmnt = DBConn.createStatement();
+        } catch (SQLException SQLEx) {
+            TAreaLog.appendText(TimeLog() + "Connect to database not completed!\n");
+            TAreaLog.appendText(SQLEx.getMessage());
+
+            return;
+        }
+        TAreaLog.appendText(TimeLog() + "Connect to database completed!\n");
+    }
+
+    @FXML
+    private void initialize() throws Exception {
+        NameHost.setText("Host name: " + InetAddress.getLocalHost().toString());
+
+        BDBType.getItems().addAll("Oracle", "My SQL");
+
+        BDBType.setValue("Oracle");
+
+        ConnectionToDataBase();
+        UpServer();
+    }
+
+    @FXML
+    private void DownServer() {
+        TAreaLog.appendText(TimeLog() + "Server downing...\n");
+        NeedClose = true;
+
+        for (int i = 0; i < SessionList.size(); ++i) {
+            TAreaLog.appendText("Server in port " + SessionList.get(i).getPort() + " was closed!\n");
+            SessionList.get(i).CloseStream();
+            SessionList.remove(i);
+        }
+
+        PortList.clear();
+        OnlineList.clear();
+
+        try {
+            if (!DBStmnt.isClosed())
+                DBStmnt.close();
+
+            if (!DBConn.isClosed())
+                DBConn.close();
+
+            TAreaLog.appendText(TimeLog() + "Database disconnected!\n");
+
+            try {
+                SocketAddress SockAddr = new InetSocketAddress(InetAddress.getLocalHost() ,10001);
+                Socket CloserSocket = new Socket();
+
+                CloserSocket.connect(SockAddr);
+
+                CloserSocket.close();
+
+                MainSocket.close();
+            } catch (UnknownHostException UHEx) {
+            } catch (IOException IOEx) {
+                TAreaLog.appendText("Main Socket closed error!\n\n");
+            }
+
+            TAreaLog.appendText(TimeLog() + "Server down access!\n\n");
+        } catch (SQLException SQLEx) {
+            TAreaLog.appendText("Downing server error! " + SQLEx.getMessage() + "\n\n");
+        }
     }
 }
