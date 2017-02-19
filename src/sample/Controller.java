@@ -196,7 +196,7 @@ public class Controller {
         String RegNick  = IS.readObject().toString();
         String RegFName = IS.readObject().toString();
         String RegLName = IS.readObject().toString();
-        String RegEmail = IS.readObject().toString();
+        String RegEmail = IS.readObject().toString().toLowerCase();
 
         ResultSet UsersData = DBStmnt.executeQuery("SELECT NICKNAME FROM USERS WHERE " +
                 "NICKNAME = '" + RegNick + "'");
@@ -232,7 +232,7 @@ public class Controller {
         String RegPass   = IS.readObject().toString();
         String RegFName  = IS.readObject().toString();
         String RegLName  = IS.readObject().toString();
-        String RegEmail  = IS.readObject().toString();
+        String RegEmail  = IS.readObject().toString().toLowerCase();
         String RegDBirth = IS.readObject().toString();
 
         boolean isRegistered;
@@ -262,7 +262,7 @@ public class Controller {
     private void Recovery(ObjectInputStream IS, ObjectOutputStream OS)
             throws IOException, ClassNotFoundException, NoSuchAlgorithmException, SQLException {
 
-        String Email = IS.readObject().toString();
+        String Email = IS.readObject().toString().toLowerCase();
 
         ResultSet UsersData = DBStmnt.executeQuery("SELECT NICKNAME, PASSWORD FROM USERS WHERE " +
                     "EMAIL = '" + Email + "'");
