@@ -11,6 +11,7 @@ import java.io.ObjectOutputStream;
 import java.net.*;
 import java.nio.charset.Charset;
 import java.math.BigInteger;
+import java.security.Key;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.*;
@@ -168,41 +169,46 @@ public class Controller {
         return TempStatementServer;
     }
 
-    private void Auth(ObjectInputStream IS, ObjectOutputStream OS)
-            throws IOException, ClassNotFoundException, SQLException {
+    private void Auth(ObjectInputStream IS, ObjectOutputStream OS, Crypto CryptoObj)
+            throws Exception {
 
-        String Login    = IS.readObject().toString();
-        String Password = IS.readObject().toString();
+        String Login    = CryptoObj.readDecryptString(IS);
+        String Password = CryptoObj.readDecryptString(IS);
 
         ResultSet UsersData = DBStmnt.executeQuery("SELECT NICKNAME, EMAIL, FIRST_NAME, DATEOFBIRTH, LAST_NAME " +
                 "FROM USERS WHERE NICKNAME = '" + Login    + "' " +
                              "AND PASSWORD = '" + Password + "'");
 
+
+        OS.writeObject(CryptoObj.genKey());
+
         if (UsersData.next()) {
             for (int i = 1; i < 6; ++i)
-                OS.writeObject(UsersData.getString(i));
+                CryptoObj.sendEncryptString(OS, UsersData.getString(i));
 
             TAreaLog.appendText(TimeLog() + "User " + Login + " is online!\n");
 
             OnlineList.add(Login);
         }
         else
-            OS.writeObject("0");
+            CryptoObj.sendEncryptString(OS, "0");
     }
 
-    private void Validation(ObjectInputStream IS, ObjectOutputStream OS)
-            throws ClassNotFoundException, IOException, SQLException {
+    private void Validation(ObjectInputStream IS, ObjectOutputStream OS, Crypto CryptoObj)
+            throws Exception {
 
-        String RegNick  = IS.readObject().toString();
-        String RegFName = IS.readObject().toString();
-        String RegLName = IS.readObject().toString();
-        String RegEmail = IS.readObject().toString().toLowerCase();
+        String RegNick  = CryptoObj.readDecryptString(IS);
+        String RegFName = CryptoObj.readDecryptString(IS);
+        String RegLName = CryptoObj.readDecryptString(IS);
+        String RegEmail = CryptoObj.readDecryptString(IS).toLowerCase();
 
         ResultSet UsersData = DBStmnt.executeQuery("SELECT NICKNAME FROM USERS WHERE " +
                 "NICKNAME = '" + RegNick + "'");
 
+        OS.writeObject(CryptoObj.genKey());
+
         if (UsersData.next()) {
-            OS.writeObject(-1);
+            CryptoObj.sendEncryptString(OS, "-1");
 
             return;
         }
@@ -211,7 +217,7 @@ public class Controller {
                 "EMAIL = '" + RegEmail + "'");
 
         if (UsersData.next()) {
-            OS.writeObject(-2);
+            CryptoObj.sendEncryptString(OS, "-2");
 
             return;
         }
@@ -222,53 +228,47 @@ public class Controller {
 
         TAreaLog.appendText(TimeLog() + "Sent a message with validation\n\t to " + RegEmail + '\n');
 
-        OS.writeObject(ValidCode[1]);
+        CryptoObj.sendEncryptString(OS, ValidCode[1]);
     }
 
-    private void AccountRegistration(ObjectInputStream IS, ObjectOutputStream OS)
-            throws IOException, ClassNotFoundException {
+    private void AccountRegistration(ObjectInputStream IS, ObjectOutputStream OS, Crypto CryptoObj)
+            throws Exception {
 
-        String RegNick   = IS.readObject().toString();
-        String RegPass   = IS.readObject().toString();
-        String RegFName  = IS.readObject().toString();
-        String RegLName  = IS.readObject().toString();
-        String RegEmail  = IS.readObject().toString().toLowerCase();
-        String RegDBirth = IS.readObject().toString();
+        String RegNick   = CryptoObj.readDecryptString(IS);
+        String RegPass   = CryptoObj.readDecryptString(IS);
+        String RegFName  = CryptoObj.readDecryptString(IS);
+        String RegLName  = CryptoObj.readDecryptString(IS);
+        String RegEmail  = CryptoObj.readDecryptString(IS).toLowerCase();
+        String RegDBirth = CryptoObj.readDecryptString(IS);
 
-        boolean isRegistered;
         try {
+            OS.writeObject(CryptoObj.genKey());
 
-            isRegistered = DBStmnt.execute(
+            DBStmnt.execute(
                     "INSERT INTO USERS(NICKNAME, PASSWORD, EMAIL, FIRST_NAME, DATEOFBIRTH, LAST_NAME) " +
                             "VALUES ('" + RegNick + "','" + RegPass + "','" + RegEmail +
                             "','" + RegFName + "','" + RegDBirth + "','" + RegLName + "')");
         } catch (SQLException SQLEx) {
             TAreaLog.appendText(TimeLog() + "Account " + RegNick + " not created!" + '\n');
-            OS.writeObject(0);
-
+            CryptoObj.sendEncryptString(OS, "0");
             return;
         }
-
-        if (isRegistered) {
-            TAreaLog.appendText(TimeLog() + "Account " + RegNick + " created!" + '\n');
-            OS.writeObject(1);
-        }
-        else {
             TAreaLog.appendText(TimeLog() + "Account " + RegNick + " not created!" + '\n');
-            OS.writeObject(0);
-        }
+            CryptoObj.sendEncryptString(OS, "0");
     }
 
-    private void Recovery(ObjectInputStream IS, ObjectOutputStream OS)
-            throws IOException, ClassNotFoundException, NoSuchAlgorithmException, SQLException {
+    private void Recovery(ObjectInputStream IS, ObjectOutputStream OS, Crypto CryptoObj)
+            throws Exception {
 
-        String Email = IS.readObject().toString().toLowerCase();
+        String Email = CryptoObj.readDecryptString(IS).toLowerCase();
 
         ResultSet UsersData = DBStmnt.executeQuery("SELECT NICKNAME, PASSWORD FROM USERS WHERE " +
                     "EMAIL = '" + Email + "'");
 
+        OS.writeObject(CryptoObj.genKey());
+
         if (UsersData == null || !UsersData.next()) {
-            OS.writeObject(-1);
+            CryptoObj.sendEncryptString(OS, "-1");
 
             return;
         }
@@ -287,13 +287,13 @@ public class Controller {
 
         MailSender.SendRecoveryMail(Nick, Email, OldPass.substring(0, 6));
 
-        OS.writeObject(0);
+        CryptoObj.sendEncryptString(OS, "0");
     }
 
-    private void Logout(ObjectInputStream IS)
-            throws IOException, ClassNotFoundException, SQLException, NoSuchAlgorithmException {
+    private void Logout(ObjectInputStream IS, Crypto CryptoObj)
+            throws Exception {
 
-        String Login = (String) IS.readObject();
+        String Login = CryptoObj.readDecryptString(IS);
 
         TAreaLog.appendText(TimeLog() + "User " + Login + " is offline!\n");
 
@@ -332,6 +332,8 @@ public class Controller {
                         if (NeedClose)
                             throw new Exception();
 
+                        Crypto CryptoObj = null;
+
                         ObjectOutputStream OS = null;
 
                         Socket CSock = MainSocket.accept();
@@ -343,21 +345,27 @@ public class Controller {
                         if (PORT < 0 && PORT > -5)
                             OS = new ObjectOutputStream(CSock.getOutputStream());
 
+                        if (PORT < 0 && PORT > -6) {
+                            CryptoObj = new Crypto();
+                            CryptoObj.setKey((Key) IS.readObject());
+                        }
+
+
                         switch (PORT) {
                             case -1:
-                                Auth(IS, OS);
+                                Auth(IS, OS, CryptoObj);
                                 break;
                             case -2:
-                                Validation(IS, OS);
+                                Validation(IS, OS, CryptoObj);
                                 break;
                             case -3:
-                                AccountRegistration(IS, OS);
+                                AccountRegistration(IS, OS, CryptoObj);
                                 break;
                             case -4:
-                                Recovery(IS, OS);
+                                Recovery(IS, OS, CryptoObj);
                                 break;
                             case -5:
-                                Logout(IS);
+                                Logout(IS, CryptoObj);
                                 break;
                             default:
                                 boolean IsUsed = false;
@@ -370,7 +378,7 @@ public class Controller {
                                         }
 
                                 if (!IsUsed)
-                                    GetServer(PORT);
+                                    GetServer(PORT); // Crypto
 
                         }
 
@@ -384,41 +392,18 @@ public class Controller {
                             CSock.close();
 
                     } catch (Exception Ex) {
-                        TAreaLog.appendText(TimeLog() + "Server System closed...\n");
+/*                        TAreaLog.appendText(TimeLog() + "Server System closed...\n");
 
                         try {
                             MainSocket.close();
                         } catch (IOException IOEx) {
                             TAreaLog.appendText(TimeLog() + "Main socket closed error!\n");
                         }
-                        break;
+*/
+  //                      break;
                     }
                 }
         }, "Main_listener").start();
-
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                while (true) {
-                    if (NeedClose)
-                        break;
-
-                    try {
-                        Thread.sleep(10000);
-                    } catch (InterruptedException IEx) {
-                        TAreaLog.appendText(TimeLog() + "Clearing port list thread crashed!\n\n");
-                    }
-
-                    TAreaLog.appendText(TimeLog() + "Clean port...\n\n");
-                    for (NcoNServer TempServer: SessionList) // Exception
-                        if(!TempServer.isActive()) {
-                            TempServer.CloseStream();
-                            SessionList.remove(TempServer);
-                    }
-
-                }
-            }
-        }).start();
 
     }
 
